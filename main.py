@@ -1,5 +1,6 @@
 import socket
 import struct
+from datetime import datetime
 
 # Protocol numbers (from IP protocol numbers)
 IPPROTO_TCP = 6
@@ -18,6 +19,9 @@ def eth_protocol_name(proto):
 def parse_packet(packet):
     protocols = []
 
+    # Timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    
     # Ethernet header (first 14 bytes)
     eth_header = packet[:14]
     eth = struct.unpack("!6s6sH", eth_header)
@@ -38,7 +42,7 @@ def parse_packet(packet):
         elif protocol_num == IPPROTO_UDP:
             protocols.append("UDP")
 
-    print(" -> ".join(protocols))
+    print(f"[{timestamp}] {' -> '.join(protocols)}")
 
 def main():
     try:
