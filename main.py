@@ -42,6 +42,15 @@ def init_csvs():
             ["timestamp", "protocolo_transporte", "ip_origem", "porta_origem", "ip_destino", "porta_destino",
              "tamanho_segmento_bytes"])
 
+# Contadores de pacotes
+ipv4_counter = 0
+ipv6_counter = 0
+eth_counter = 0
+tcp_counter = 0
+udp_counter = 0
+arp_counter = 0
+ICMP_counter = 0
+ICMPv6_counter = 0
 
 def parse_packet(packet):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -51,8 +60,10 @@ def parse_packet(packet):
     if len(eth_header) < 14:
         return
 
+    global eth_counter
+    eth_counter = eth_counter + 1
     dest_mac, src_mac, proto = struct.unpack("!6s6sH", eth_header)
-    ether_type = f"0x{proto:04x}"
+    ether_type = f"0x{proto:04x} - {eth_protocol_name(proto)}"
     tamanho_quadro = len(packet)
 
     with open(CAMADA2_CSV, 'a', newline='') as f:
@@ -66,6 +77,8 @@ def parse_packet(packet):
         ])
 
     if proto == 0x0800:  # IPv4
+        global ipv4_counter
+        ipv4_counter = ipv4_counter + 1
         ip_header = packet[14:34]
         if len(ip_header) < 20:
             return
@@ -87,23 +100,31 @@ def parse_packet(packet):
                 total_length
             ])
 
+        global tcp_counter
+        global udp_counter
         start = 14 + ((iph[0] & 0x0F) * 4)
-        if protocolo_transporte in [IPPROTO_TCP, IPPROTO_UDP] and len(packet) >= start + 4:
-            src_port, dest_port = struct.unpack("!HH", packet[start:start + 4])
-            protocolo_nome = "TCP" if protocolo_transporte == IPPROTO_TCP else "UDP"
-            with open(CAMADA4_CSV, 'a', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow([
-                    timestamp,
-                    protocolo_nome,
-                    src_ip,
-                    src_port,
-                    dest_ip,
-                    dest_port,
-                    total_length
-                ])
+        if protocolo_transporte == IPPROTO_TCP:
+            protocolo_nome = "TCP"
+            tcp_counter = tcp_counter +1
+        if protocolo_transporte == IPPROTO_UDP:
+            protocolo_nome = "UDP"
+            udp_counter = udp_counter +1
+        src_port, dest_port = struct.unpack("!HH", packet[start:start + 4])
+        with open(CAMADA4_CSV, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                timestamp,
+                protocolo_nome,
+                src_ip,
+                src_port,
+                dest_ip,
+                dest_port,
+                total_length
+            ])
 
     elif proto == 0x86DD:  # IPv6
+        global ipv6_counter
+        ipv6_counter = ipv6_counter + 1
         ip_header = packet[14:54]
         if len(ip_header) < 40:
             return
@@ -144,11 +165,21 @@ def parse_packet(packet):
 
 
 def main():
+    global eth_counter
+    global ipv4_counter
+    global ipv6_counter
+    global tcp_counter
+    global udp_counter
     init_csvs()
     try:
         conn = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(0x0003))
-        print("🔍 Capturando pacotes... Pressione Ctrl+C para encerrar.")
         while True:
+            print(f"🔍 {eth_counter} pacotes Ethernet capturados.")
+            print(f"🔍 {ipv4_counter} pacotes IPv4 capturados.")
+            print(f"🔍 {ipv6_counter} pacotes IPv6 capturados.")
+            print(f"🔍 {tcp_counter} pacotes TCP capturados.")
+            print(f"🔍 {udp_counter} pacotes UDP capturados.")
+            print(f"Pressione Ctrl+C para encerrar.")
             raw_data, addr = conn.recvfrom(65535)
             parse_packet(raw_data)
     except PermissionError:
